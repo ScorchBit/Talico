@@ -345,7 +345,6 @@ def main():
 
         pressed_keys = pygame.key.get_pressed()
         player_group.update(pressed_keys)
-        # player_group.draw(window)
         draw(player)
         debug_effects(debug_catalog, player)
         pygame.display.update()
