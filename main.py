@@ -169,6 +169,7 @@ def start_screen():
                     pressed_space = True
             elif event.type == pygame.QUIT:
                 return pygame.QUIT
+        CLOCK.tick(FPS)
     start_screen_music.fadeout(3000)
     fade_out = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
     fade_out = fade_out.convert()
@@ -229,8 +230,7 @@ def debug_menu(debug_catalog):
     overlay.fill(BLACK)
     overlay.set_alpha(180)
     window.blit(overlay, (0, 0))
-    debug_tool_name_font = pygame.font.Font(os.path.join('assets', 'fonts', 'VT323.ttf'), 32)
-    debug_tool_names = [debug_tool_name_font.render(key, True, (47, 203, 104) if debug_catalog[key] else (206, 52, 45)) for key in debug_catalog]
+    debug_tool_names = [debug_font.render(key, True, (47, 203, 104) if debug_catalog[key] else (206, 52, 45)) for key in debug_catalog]
     left_x = WINDOW_WIDTH // 4
     middle_x = left_x * 2
     right_x = left_x + middle_x
@@ -269,7 +269,7 @@ def debug_menu(debug_catalog):
                         key = list(debug_catalog.keys())[index]
                         debug_catalog[key] = not debug_catalog[key]
                         y_level =  1 + (index // 3)
-                        tool_name_flipped_color_text = debug_tool_name_font.render(key, True, (47, 203, 104) if debug_catalog[key] else (206, 52, 45))
+                        tool_name_flipped_color_text = debug_font.render(key, True, (47, 203, 104) if debug_catalog[key] else (206, 52, 45))
                         if index % 3 == 0:
                             window.blit(tool_name_flipped_color_text, (left_x - tool_name_flipped_color_text.get_width()//2, STARTING_Y*y_level))
                         elif index % 3 == 1:
@@ -285,6 +285,11 @@ def debug_effects(debug_catalog, player):
         for sprite in player.current_room.sprite_group.sprites():
             pygame.draw.rect(window, (255, 0, 0), sprite.hitbox)
         pygame.draw.rect(window, (0, 0, 255), player.hitbox)
+    if debug_catalog['SHOW_CURSOR_LOCATION']:
+        cursor_location = pygame.mouse.get_pos()
+        cursor_location_text = debug_font.render(str(cursor_location), True, (206, 52, 45))
+        window.blit(cursor_location_text, (WINDOW_WIDTH-cursor_location_text.get_width(), 0))
+    
 
 def debug_actions(debug_catalog, player, event):
     if debug_catalog['ROOM_JUMP']:
@@ -308,24 +313,27 @@ def draw(player):
 
     
 def main():
+    pygame.init()
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
     global logger
     logger = logging.getLogger(__name__)
-    logger.setLevel(logging.INFO)
-    whole_log_handler = logging.FileHandler('cata.log')
-    whole_log_handler.setLevel(logging.DEBUG)
-    whole_log_formatter = logging.Formatter('%(levelname)s: [%(asctime)s]: %(name)s: %(lineno)d - %(message)s')
-    whole_log_handler.setFormatter(whole_log_formatter)
-    logger.addHandler(whole_log_handler)
+    logger.setLevel(logging.DEBUG)
+    catalog_file_handler = logging.FileHandler('cata.log')
+    catalog_file_handler.setLevel(logging.DEBUG)
+    catalog_file_formatter = logging.Formatter('%(levelname)s: [%(asctime)s]: %(name)s: %(lineno)d - %(message)s')
+    catalog_file_handler.setFormatter(catalog_file_formatter)
+    logger.addHandler(catalog_file_handler)
     DEBUG_MODE = True # this is the ONLY value that should CHANGE
-    logger.debug('Ran with DEBUG_MODE = {DEBUG_MODE}'.format(DEBUG_MODE))
+    if DEBUG_MODE:
+        global debug_font
+        debug_font = pygame.font.Font(os.path.join('assets', 'fonts', 'VT323.ttf'), 32)
+    logger.debug('DEBUG_MODE[{}]'.format(DEBUG_MODE))
     debug_catalog = {
         'SHOW_CURSOR_LOCATION': False,
         'ROOM_JUMP': DEBUG_MODE, # automatically set ROOM_JUMP on if DEBUG_MODE is on
         'SHOW_HITBOXES': False
         }
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-    pygame.init()
     global CLOCK, FPS
     CLOCK = pygame.time.Clock()
     FPS = 60 # GAME SETTING
@@ -364,4 +372,3 @@ if __name__ == '__main__':
     main()
     pygame.quit()
     logger.debug('EOF')
- 
