@@ -1,4 +1,4 @@
-import os, pygame, time
+import os, sys, pygame, time, logging
 
 
 BLACK = (0, 0, 0)
@@ -309,7 +309,16 @@ def draw(player):
     
 def main():
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+    global logger
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.INFO)
+    whole_log_handler = logging.FileHandler('cata.log')
+    whole_log_handler.setLevel(logging.DEBUG)
+    whole_log_formatter = logging.Formatter('%(levelname)s: [%(asctime)s]: %(name)s: %(lineno)d - %(message)s')
+    whole_log_handler.setFormatter(whole_log_formatter)
+    logger.addHandler(whole_log_handler)
     DEBUG_MODE = True # this is the ONLY value that should CHANGE
+    logger.debug('Ran with DEBUG_MODE = {DEBUG_MODE}'.format(DEBUG_MODE))
     debug_catalog = {
         'SHOW_CURSOR_LOCATION': False,
         'ROOM_JUMP': DEBUG_MODE, # automatically set ROOM_JUMP on if DEBUG_MODE is on
@@ -354,4 +363,5 @@ def main():
 if __name__ == '__main__':
     main()
     pygame.quit()
+    logger.debug('EOF')
  
