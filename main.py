@@ -1,8 +1,7 @@
-import os, sys, pygame, time, logging
+import os, pygame, time, logging
 
 
 BLACK = (0, 0, 0)
-
 
 class RoomSprite(pygame.sprite.Sprite):
     def __init__(self, image_path, position, scale, enter_room=False, enter_position=(0, 0), phase_through=False, hitbox=None):
@@ -22,6 +21,41 @@ class RoomSprite(pygame.sprite.Sprite):
         self.enter_position = enter_position
 
 
+class BattleUserInterface():
+    def __init__(self):
+        self.tab_bar = pygame.Rect(0, 0, WINDOW_WIDTH//12, WINDOW_HEIGHT-WINDOW_WIDTH//12)
+        self.option_bar = pygame.Rect(self.tab_bar.w, WINDOW_HEIGHT-WINDOW_HEIGHT//12, WINDOW_WIDTH-self.tab_bar.w, WINDOW_HEIGHT//12)
+        self.health_square =pygame.Rect(0, WINDOW_HEIGHT-self.tab_bar.w, self.tab_bar.w, self.tab_bar.w)
+        self.tab_index = 0
+        self.tab_names = ['attack', 'potion', 'heal']
+        self.tab_images = []
+        self.heart_images = [pygame.image.load(os.path.join('assets', 'battleUI', 'hearts', '{}-heart.png'.format(num))) for num in [100, 70, 50, 20, 5, 0]]
+        self.heart_images = [pygame.transform.scale(image, (self.health_square.w, self.health_square.h)) for image in self.heart_images]
+        self.health = 100
+        for i in range(len(self.tab_names)):
+            image = pygame.image.load(os.path.join('assets', 'battleUI', '{}.png'.format(self.tab_names[i])))
+            new_image = pygame.transform.scale(image, (self.tab_bar.w, self.tab_bar.w))
+            self.tab_images.append(new_image)
+        self.tab_image_y_increment = (self.tab_bar.h - len(self.tab_images)*self.tab_bar.w) // len(self.tab_images) + self.tab_bar.w
+    def add_to_tab_index(self, num):
+        self.tab_index += num if self.tab_index < len(self.tab_names) and self.tab_index > 0 else 0
+    def draw(self):
+        pygame.draw.rect(window, (255, 0, 0), self.tab_bar)
+        pygame.draw.rect(window, (0, 255, 0), self.health_square)
+        pygame.draw.rect(window, (0, 0, 255), self.option_bar)
+        y = 0
+        for i in range(len(self.tab_images)):
+            window.blit(self.tab_images[i], (0, y))
+            y += self.tab_image_y_increment
+        window.blit(self.get_health_image(), (0, self.tab_bar.h))
+    def get_health_image(self):
+        if self.health == 100:
+            return self.heart_images[0]
+        if self.health == 0:
+            return self.heart_images[-1]
+        return self.heart_images[2]
+
+
 class Player(pygame.sprite.Sprite):
     def __init__(self, image_path, position, scale, vel, room_gen, hitbox=None):
         super().__init__()
@@ -38,6 +72,11 @@ class Player(pygame.sprite.Sprite):
         self.velocity = vel
         self.gen_next_room = room_gen()
         self.current_room = next(self.gen_next_room)
+        self.in_battle_mode = False
+        self.battle_ui = BattleUserInterface()
+    def interpret_event_for_battle_mode(self, event):
+        if event.type == pygame.MOUSEWHEEL:
+            self.battle_ui.add_to_tab_index(event.y)
     def update(self, pressed_keys):
         if pressed_keys[pygame.K_w]:
             self.w()
@@ -47,7 +86,6 @@ class Player(pygame.sprite.Sprite):
             self.s()
         if pressed_keys[pygame.K_d]:
             self.d()
-        
     def w(self):
         phase = True
         self.hitbox.y -= self.velocity
@@ -214,6 +252,7 @@ def confirm_escape_game():
                     break
         CLOCK.tick(FPS)
 
+
 class Cursor(pygame.sprite.Sprite):
     def __init__(self, image_path, scale):
         super().__init__()
@@ -222,7 +261,6 @@ class Cursor(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
     def update(self):
         self.rect.center = pygame.mouse.get_pos()
-            
 
 
 def debug_menu(debug_catalog):
@@ -268,6 +306,7 @@ def debug_menu(debug_catalog):
                     if pygame.Rect.colliderect(cursor.rect, name_rect):
                         key = list(debug_catalog.keys())[index]
                         debug_catalog[key] = not debug_catalog[key]
+                        logger.debug('{key} is now {bool}'.format(key=key, bool=debug_catalog[key]))
                         y_level =  1 + (index // 3)
                         tool_name_flipped_color_text = debug_font.render(key, True, (47, 203, 104) if debug_catalog[key] else (206, 52, 45))
                         if index % 3 == 0:
@@ -280,6 +319,8 @@ def debug_menu(debug_catalog):
         pygame.display.update()
         CLOCK.tick(FPS)
 
+    
+
 def debug_effects(debug_catalog, player):
     if debug_catalog['SHOW_HITBOXES']:
         for sprite in player.current_room.sprite_group.sprites():
@@ -289,6 +330,7 @@ def debug_effects(debug_catalog, player):
         cursor_location = pygame.mouse.get_pos()
         cursor_location_text = debug_font.render(str(cursor_location), True, (206, 52, 45))
         window.blit(cursor_location_text, (WINDOW_WIDTH-cursor_location_text.get_width(), 0))
+    player.in_battle_mode = debug_catalog['BATTLE_MODE']
     
 
 def debug_actions(debug_catalog, player, event):
@@ -309,6 +351,8 @@ def draw(player):
     window.blit(player.current_room.background_image, (0, 0))
     for sprite in sprites_sorted_by_z_index_increasing:
         window.blit(sprite.image, sprite.rect)
+    if player.in_battle_mode:
+        player.battle_ui.draw()
 
 
     
@@ -327,12 +371,13 @@ def main():
     if DEBUG_MODE:
         global debug_font
         debug_font = pygame.font.Font(os.path.join('assets', 'fonts', 'VT323.ttf'), 32)
+        debug_catalog = {
+            'SHOW_CURSOR_LOCATION': False,
+            'ROOM_JUMP': DEBUG_MODE, # automatically set ROOM_JUMP on if DEBUG_MODE is on
+            'SHOW_HITBOXES': False,
+            'BATTLE_MODE': False
+            }
     logger.debug('DEBUG_MODE[{}]'.format(DEBUG_MODE))
-    debug_catalog = {
-        'SHOW_CURSOR_LOCATION': False,
-        'ROOM_JUMP': DEBUG_MODE, # automatically set ROOM_JUMP on if DEBUG_MODE is on
-        'SHOW_HITBOXES': False
-        }
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
     global CLOCK, FPS
     CLOCK = pygame.time.Clock()
@@ -341,7 +386,7 @@ def main():
     window = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
     global WINDOW_WIDTH, WINDOW_HEIGHT
     WINDOW_WIDTH, WINDOW_HEIGHT = pygame.display.get_surface().get_size()
-    pygame.display.set_caption('Talico')
+    pygame.display.set_caption('project Talico')
     if start_screen() == pygame.QUIT: return
     player = Player(os.path.join('assets', 'images', 'sprites', 'calico.png'), (WINDOW_WIDTH//2, WINDOW_HEIGHT//2), 0.7, 10, room_gen, (100, 50))
     player_group = pygame.sprite.Group()
@@ -357,8 +402,10 @@ def main():
                     if confirm_escape_game() == pygame.QUIT: return
             if DEBUG_MODE:
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_SLASH:
-                    debug_menu(debug_catalog) # switch debug tools on/off
-                debug_actions(debug_catalog, player, event) # debug tools actions
+                    debug_menu(debug_catalog) # opens an overlay with clickable text that turns specific items in debug_catalog on/off
+                debug_actions(debug_catalog, player, event) # keyboard events are interpreted here to produce an outcome
+            if player.in_battle_mode:
+                player.interpret_event_for_battle_mode(event)
 
         pressed_keys = pygame.key.get_pressed()
         player_group.update(pressed_keys)
