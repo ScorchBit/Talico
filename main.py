@@ -55,6 +55,18 @@ class BattleUserInterface():
             return self.heart_images[-1]
         return self.heart_images[2]
 
+def center_player():
+    original_distance = yield None
+    logger.debug('original_distance = {}'.format(original_distance))
+    distance_covered = (0, 0)
+    for i in range(5, 100, 2):
+        to_move = (original_distance[0]//i, original_distance[1]//i)
+        logger.debug('to_move = {}'.format(to_move))
+        distance_covered = (distance_covered[0]+abs(to_move[0]), distance_covered[1]+abs(to_move[1]))
+        if distance_covered[0] >= abs(original_distance[0]) and distance_covered[1] >= abs(original_distance[1]):
+            break
+        yield to_move
+    yield False
 
 class Player(pygame.sprite.Sprite):
     def __init__(self, image_path, position, scale, vel, room_gen, hitbox=None):
@@ -74,6 +86,9 @@ class Player(pygame.sprite.Sprite):
         self.current_room = next(self.gen_next_room)
         self.in_battle_mode = False
         self.battle_ui = BattleUserInterface()
+        self.centered = False
+        self.sent = False
+        self.center_gen = None
     def interpret_event_for_battle_mode(self, event):
         if event.type == pygame.MOUSEWHEEL:
             self.battle_ui.add_to_tab_index(event.y)
@@ -86,6 +101,39 @@ class Player(pygame.sprite.Sprite):
             self.s()
         if pressed_keys[pygame.K_d]:
             self.d()
+        if self.in_battle_mode and self.centered == False: # center the "camera" an the player
+            if self.sent:
+                to_move = next(self.center_gen)
+                if to_move == False:
+                    self.centered = True
+                    self.sent = False
+                else:
+                    self.rect.center = (self.rect.center[0]+to_move[0], self.rect.center[1]+to_move[1])
+                    self.hitbox.center = (self.hitbox.center[0]+to_move[0], self.hitbox.center[1]+to_move[1])
+                    self.current_room.background_image_position = (self.current_room.background_image_position[0]+to_move[0], self.current_room.background_image_position[1]+to_move[1])
+                    for sprite in self.current_room.sprite_group.sprites():
+                        sprite.rect.center = (sprite.rect.center[0]+to_move[0], self.rect.center[1]+to_move[1])
+                        sprite.hitbox.center = (sprite.hitbox.center[0]+to_move[0], self.rect.center[1]+to_move[1])
+            else:
+                self.center_gen = center_player()
+                center = (WINDOW_WIDTH//2+self.battle_ui.tab_bar.w//2, WINDOW_HEIGHT//2-self.battle_ui.option_bar.h//2)
+                current_position = self.rect.center
+                distance = (center[0]-current_position[0], center[1]-current_position[1])
+                self.center_gen.__next__()
+                to_move = self.center_gen.send(distance)
+                self.sent = True
+                if to_move == False:
+                    self.centered = True
+                    self.sent = False
+                else:
+                    self.rect.center = (self.rect.center[0]+to_move[0], self.rect.center[1]+to_move[1])
+                    self.hitbox.center = (self.hitbox.center[0]+to_move[0], self.hitbox.center[1]+to_move[1])
+                    self.current_room.background_image_position = (self.current_room.background_image_position[0]+to_move[0], self.current_room.background_image_position[1]+to_move[1])
+                    for sprite in self.current_room.sprite_group.sprites():
+                        sprite.rect.center = (sprite.rect.center[0]+to_move[0], self.rect.center[1]+to_move[1])
+                        sprite.hitbox.center = (sprite.hitbox.center[0]+to_move[0], self.rect.center[1]+to_move[1])
+        if not self.in_battle_mode:
+            self.centered = False
     def w(self):
         phase = True
         self.hitbox.y -= self.velocity
@@ -101,6 +149,13 @@ class Player(pygame.sprite.Sprite):
                     phase = False
         if not phase:
             self.hitbox.y += self.velocity
+            return
+        if self.in_battle_mode:
+            self.hitbox.y += self.velocity
+            for sprite in self.current_room.sprite_group.sprites():
+                sprite.rect.y += self.velocity
+                sprite.hitbox.y += self.velocity
+            self.current_room.background_image_position = (self.current_room.background_image_position[0], self.current_room.background_image_position[1] + self.velocity)
             return
         self.rect.y -= self.velocity
     def a(self):
@@ -119,6 +174,13 @@ class Player(pygame.sprite.Sprite):
         if not phase:
             self.hitbox.x += self.velocity
             return
+        if self.in_battle_mode:
+            self.hitbox.x += self.velocity
+            for sprite in self.current_room.sprite_group.sprites():
+                sprite.rect.x += self.velocity
+                sprite.hitbox.x += self.velocity
+            self.current_room.background_image_position = (self.current_room.background_image_position[0] + self.velocity, self.current_room.background_image_position[1])
+            return
         self.rect.x -= self.velocity
     def s(self):
         phase = True
@@ -135,6 +197,13 @@ class Player(pygame.sprite.Sprite):
                     phase = False
         if not phase:
             self.hitbox.y -= self.velocity
+            return
+        if self.in_battle_mode:
+            self.hitbox.y -= self.velocity
+            for sprite in self.current_room.sprite_group.sprites():
+                sprite.rect.y -= self.velocity
+                sprite.hitbox.y -= self.velocity
+            self.current_room.background_image_position = (self.current_room.background_image_position[0], self.current_room.background_image_position[1] - self.velocity)
             return
         self.rect.y += self.velocity
     def d(self):
@@ -153,6 +222,13 @@ class Player(pygame.sprite.Sprite):
         if not phase:
             self.hitbox.x -= self.velocity
             return
+        if self.in_battle_mode:
+            self.hitbox.x -= self.velocity
+            for sprite in self.current_room.sprite_group.sprites():
+                sprite.rect.x -= self.velocity
+                sprite.hitbox.x -= self.velocity
+            self.current_room.background_image_position = (self.current_room.background_image_position[0] - self.velocity, self.current_room.background_image_position[1])
+            return
         self.rect.x += self.velocity
 
 class Room:
@@ -160,6 +236,7 @@ class Room:
         self.name = name
         self.adjacent_rooms = compass
         self.background_image = pygame.transform.scale(pygame.image.load(bg_image_path), (WINDOW_WIDTH, WINDOW_HEIGHT))
+        self.background_image_position = (0, 0)
         self.sprite_group = sprite_group
     def __str__(self):
         return '"{name}": {adjacent_rooms}'.format(name=self.name, adjacent_rooms=self.adjacent_rooms)
@@ -348,7 +425,7 @@ def debug_actions(debug_catalog, player, event):
 def draw(player):
     player_and_others = player.current_room.sprite_group.sprites() + [player]
     sprites_sorted_by_z_index_increasing = sorted(player_and_others, key=lambda sprite: sprite.hitbox.top)
-    window.blit(player.current_room.background_image, (0, 0))
+    window.blit(player.current_room.background_image, player.current_room.background_image_position)
     for sprite in sprites_sorted_by_z_index_increasing:
         window.blit(sprite.image, sprite.rect)
     if player.in_battle_mode:
@@ -409,6 +486,7 @@ def main():
 
         pressed_keys = pygame.key.get_pressed()
         player_group.update(pressed_keys)
+        window.fill((0, 0, 0))
         draw(player)
         debug_effects(debug_catalog, player)
         pygame.display.update()
